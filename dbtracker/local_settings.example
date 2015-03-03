@@ -1,0 +1,25 @@
+
+DATABASES = {
+    'mysql': {
+    'ENGINE': 'mysql',
+    'USER': 'bret_ro',
+    'PASSWORD': '',
+    'HOST': '',
+    'PORT': '',
+    },
+    'postgresql': {
+    'ENGINE': 'postgresql_psycopg2',
+    'USER': 'bret_ro',
+    'PASSWORD': '',
+    'HOST': '',
+    'PORT': '',
+    },
+    'storage': {
+    'postgresql': {
+    'ENGINE': 'postgresql_psycopg2',
+    'USER': 'root',
+    'PASSWORD': '',
+    'HOST': '',
+    'PORT': '',
+    }
+}
