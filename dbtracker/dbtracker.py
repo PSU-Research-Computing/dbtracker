@@ -1,6 +1,7 @@
 import pymysql
 import psycopg2
-from local_settings import DATABASES
+import datetime
+from .local_settings import DATABASES
 
 
 def cli(args):
@@ -28,15 +29,26 @@ def storage_db():
         host=DATABASES.get('storage').get('HOST'), 
         password=DATABASES.get('storage').get('PASSWORD'), 
         user=DATABASES.get('storage').get('USER'),
-        database="postgres"
+        database="dbtracker"
         )
     return conn
 
 def dump(conn):
+    now = datetime.datetime.now()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM information_schema.tables")
-    print(cursor.fetchall())
-    return cursor.fetchall()
+    scon = storage_db()
+    scursor = scon.cursor()
+    for key in dictfetchall(cursor):
+        insert(scursor=scursor,date_time=now,db_name=key.get('TABLE_SCHEMA'), table_name=key.get('TABLE_NAME'), row_count=key.get('TABLE_ROWS') or 0)
+    scon.commit()
+    return
+
+def insert(scursor,date_time="", db_name="", schema_name="", table_name="", row_count=0):
+    scursor.execute(
+        """INSERT INTO stats (datetime, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
+        {'date': date_time, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
+    return date_time, db_name, schema_name, table_name, row_count
 
 # From https://github.com/PSU-OIT-ARC/django-arcutils/blob/master/arcutils/__init__.py#L82
 def dictfetchall(cursor):
