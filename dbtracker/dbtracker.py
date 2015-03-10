@@ -5,7 +5,7 @@ from .local_settings import DATABASES
 
 
 def cli(args):
-    return dump(mysql())
+    return get_pg_dbs(postgres())
 
 def mysql():
     conn = pymysql.connect(
@@ -33,6 +33,13 @@ def storage_db():
         )
     return conn
 
+def get_pg_dbs(conn):
+    cursor = conn.cursor()
+    cursor.execute("SELECT datname FROM pg_database WHERE datistemplate = false")
+    for key in dictfetchall(cursor):
+        print(key.get("datname"))
+    return
+
 def dump(conn):
     now = datetime.datetime.now()
     cursor = conn.cursor()
@@ -40,7 +47,13 @@ def dump(conn):
     scon = storage_db()
     scursor = scon.cursor()
     for key in dictfetchall(cursor):
-        insert(scursor=scursor,date_time=now,db_name=key.get('TABLE_SCHEMA'), table_name=key.get('TABLE_NAME'), row_count=key.get('TABLE_ROWS') or 0)
+        insert(
+            scursor=scursor,
+            date_time=now,
+            db_name=key.get('TABLE_SCHEMA'),
+            table_name=key.get('TABLE_NAME'),
+            row_count=key.get('TABLE_ROWS') or 0,
+            )
     scon.commit()
     return
 
