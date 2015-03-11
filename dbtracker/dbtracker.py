@@ -20,7 +20,7 @@ def postgres():
         host=DATABASES.get('postgresql').get('HOST'), 
         password=DATABASES.get('postgresql').get('PASSWORD'), 
         user=DATABASES.get('postgresql').get('USER'),
-        database="postgres"
+        database="oro"
         )
     return conn
 
@@ -38,6 +38,13 @@ def get_pg_dbs(conn):
     cursor.execute("SELECT datname FROM pg_database WHERE datistemplate = false")
     for key in dictfetchall(cursor):
         print(key.get("datname"))
+    return
+
+def get_info_schema(conn):
+    cursor = conn.cursor()
+    cursor.execute("SELECT schemaname,relname,n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;")
+    for key in dictfetchall(cursor):
+        print(key)
     return
 
 def dump(conn):
