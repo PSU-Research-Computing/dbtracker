@@ -3,23 +3,23 @@ import psycopg2
 import datetime
 import sys
 import logging
+import pprint
 from .local_settings import DATABASES
 
 logger = logging.getLogger(__name__)
 
 def cli(args):
     now = datetime.datetime.now()
-    logger.info('Connecting to storage db...')
-    storage_con = postgresql('storage', 'dbtracker')
-    logger.info('Connected to storage db')
-    logger.info('Collecting mysql stats...')
-    save_mysql_stats('mysql', storage_con, now)
-    logger.info('Mysql stats complete.')
-    logger.info('Collecting postgresql stats...')
-    save_pg_stats('postgresql', storage_con, now)
-    logger.info('Postgresql stats complete')
-    storage_con.commit()
-    logger.info('Stats commited to strage db!')
+    if args.save:
+        storage_con = postgresql('storage', 'dbtracker')
+        logger.info('Connected to storage db')
+        mysql_stats('mysql', storage_con, now)
+        pg_stats('postgresql', storage_con, now)
+        storage_con.commit()
+        logger.info('Stats commited to strage db!')
+    else:
+        mysql_stats('mysql')
+        pg_stats('postgresql')
     return
 
 def mysql(mysql_settings):
@@ -39,12 +39,23 @@ def postgresql(pg_settings, db_name):
         )
     return conn
 
-def save_mysql_stats(mysql_settings, scon, timestamp):
+def mysql_stats(mysql_settings, scon=None, timestamp=None):
+    logger.info('Collecting mysql stats...')
     con = mysql(mysql_settings)
     cursor = con.cursor()
-    scursor = scon.cursor()
     cursor.execute("SELECT * FROM information_schema.tables")
-    for table in dictfetchall(cursor):
+    tables = dictfetchall(cursor)
+    if scon:
+        save_mysql_stats(scon, tables, timestamp)
+    else:
+        count_mysql_stats(tables)
+    con.close()
+    logger.info('Mysql stats complete.')
+    return
+
+def save_mysql_stats(scon, tables, timestamp):
+    scursor = scon.cursor()
+    for table in tables:
         insert(
             scursor=scursor,
             date_time=timestamp,
@@ -52,14 +63,52 @@ def save_mysql_stats(mysql_settings, scon, timestamp):
             table_name=table.get('TABLE_NAME'),
             row_count=table.get('TABLE_ROWS') or 0,
             )
-    con.close()
     return
 
-def save_pg_stats(pg_settings, scon, timestamp):
+def count_mysql_stats(tables):
+    dbs = {}
+    for table in tables:
+        if table['TABLE_ROWS']:
+            if table['TABLE_SCHEMA'] in dbs:
+                dbs[table['TABLE_SCHEMA']] += table['TABLE_ROWS']
+            else:
+                dbs[table['TABLE_SCHEMA']] = table['TABLE_ROWS']
+    pprint.pprint(dbs, width=1)
+    return
+
+def pg_stats(pg_settings, scon=None, timestamp=None):
+    logger.info('Collecting postgresql stats...')
     con = postgresql(pg_settings, 'postgres')
-    scursor = scon.cursor()
     pg_dbs = get_pg_dbs(con)
     con.close()
+    if scon:
+        save_pg_stats(pg_settings, scon, pg_dbs, timestamp)
+    else:
+        count_pg_stats(pg_settings, pg_dbs)
+    logger.info('Postgresql stats complete')
+    return
+
+def count_pg_stats(pg_settings, pg_dbs):
+    dbs = {}
+    for db in pg_dbs:
+        db_name = db.get("datname")
+        try:
+            con = postgresql(pg_settings, db_name)
+            cursor = con.cursor()
+            cursor.execute("SELECT schemaname,relname,n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;")
+            for table in dictfetchall(cursor):
+                if table['n_live_tup']:
+                    if db_name in dbs:
+                        dbs[db_name] += table['n_live_tup']
+                    else:
+                        dbs[db_name] = table['n_live_tup']
+        except psycopg2.DatabaseError as e:
+            logger.warning('Skipping: %s', db_name, extra={'e': e})
+    pprint.pprint(dbs, width=1)
+    return
+
+def save_pg_stats(pg_settings, scon, pg_dbs, timestamp):
+    scursor = scon.cursor()
     for db in pg_dbs:
         db_name = db.get("datname")
         try:
@@ -88,7 +137,6 @@ def save_pg_stats(pg_settings, scon, timestamp):
             con.close()
     return
 
-
 def get_pg_dbs(pg_con):
     cursor = pg_con.cursor()
     cursor.execute("SELECT datname FROM pg_database WHERE datistemplate = false")
@@ -102,7 +150,7 @@ def get_info_schema(con):
         print(key)
     return
 
-def insert(scursor, date_time="", db_name="", schema_name="", table_name="", row_count=0):
+def insert(scursor, date_time, db_name, schema_name, table_name, row_count):
     scursor.execute(
         """INSERT INTO stats (datetime, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
         {'date': date_time, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
