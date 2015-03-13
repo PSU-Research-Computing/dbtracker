@@ -4,6 +4,7 @@ import datetime
 import sys
 import logging
 import pprint
+import warnings
 from .local_settings import DATABASES
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,9 @@ def cli(args):
         storage_con.commit()
         logger.info('Stats commited to strage db!')
     else:
-        mysql_stats_dict = mysql_stats('mysql')
-        pg_stats_dict = pg_stats('postgresql')
-        pprint.pprint(mysql_stats_dict, width=1)
-        pprint.pprint(pg_stats_dict, width=1)
+        db_row_count = mysql_stats('mysql').copy()
+        db_row_count.update(pg_stats('postgresql'))
+        pprint.pprint(db_row_count, width=1)
     return
 
 def mysql(mysql_settings):
@@ -46,7 +46,9 @@ def mysql_stats(mysql_settings, scon=None, timestamp=None):
     logger.info('Collecting mysql stats...')
     con = mysql(mysql_settings)
     cursor = con.cursor()
-    cursor.execute("SELECT * FROM information_schema.tables")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cursor.execute("SELECT * FROM information_schema.tables")
     tables = dictfetchall(cursor)
     if scon:
         save_mysql_stats(scon, tables, timestamp)
@@ -62,6 +64,7 @@ def save_mysql_stats(scon, tables, timestamp):
         insert(
             scursor=scursor,
             date_time=timestamp,
+            schema_name="",
             db_name=table.get('TABLE_SCHEMA'),
             table_name=table.get('TABLE_NAME'),
             row_count=table.get('TABLE_ROWS') or 0,
