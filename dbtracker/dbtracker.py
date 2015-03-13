@@ -18,8 +18,10 @@ def cli(args):
         storage_con.commit()
         logger.info('Stats commited to strage db!')
     else:
-        mysql_stats('mysql')
-        pg_stats('postgresql')
+        mysql_stats_dict = mysql_stats('mysql')
+        pg_stats_dict = pg_stats('postgresql')
+        pprint.pprint(mysql_stats_dict, width=1)
+        pprint.pprint(pg_stats_dict, width=1)
     return
 
 def mysql(mysql_settings):
@@ -40,6 +42,7 @@ def postgresql(pg_settings, db_name):
     return conn
 
 def mysql_stats(mysql_settings, scon=None, timestamp=None):
+    dbs = None
     logger.info('Collecting mysql stats...')
     con = mysql(mysql_settings)
     cursor = con.cursor()
@@ -48,10 +51,10 @@ def mysql_stats(mysql_settings, scon=None, timestamp=None):
     if scon:
         save_mysql_stats(scon, tables, timestamp)
     else:
-        count_mysql_stats(tables)
+        dbs = count_mysql_stats(tables)
     con.close()
     logger.info('Mysql stats complete.')
-    return
+    return dbs
 
 def save_mysql_stats(scon, tables, timestamp):
     scursor = scon.cursor()
@@ -73,10 +76,10 @@ def count_mysql_stats(tables):
                 dbs[table['TABLE_SCHEMA']] += table['TABLE_ROWS']
             else:
                 dbs[table['TABLE_SCHEMA']] = table['TABLE_ROWS']
-    pprint.pprint(dbs, width=1)
-    return
+    return dbs
 
 def pg_stats(pg_settings, scon=None, timestamp=None):
+    dbs = None
     logger.info('Collecting postgresql stats...')
     con = postgresql(pg_settings, 'postgres')
     pg_dbs = get_pg_dbs(con)
@@ -84,9 +87,9 @@ def pg_stats(pg_settings, scon=None, timestamp=None):
     if scon:
         save_pg_stats(pg_settings, scon, pg_dbs, timestamp)
     else:
-        count_pg_stats(pg_settings, pg_dbs)
+        dbs = count_pg_stats(pg_settings, pg_dbs)
     logger.info('Postgresql stats complete')
-    return
+    return dbs
 
 def count_pg_stats(pg_settings, pg_dbs):
     dbs = {}
@@ -104,8 +107,7 @@ def count_pg_stats(pg_settings, pg_dbs):
                         dbs[db_name] = table['n_live_tup']
         except psycopg2.DatabaseError as e:
             logger.warning('Skipping: %s', db_name, extra={'e': e})
-    pprint.pprint(dbs, width=1)
-    return
+    return dbs
 
 def save_pg_stats(pg_settings, scon, pg_dbs, timestamp):
     scursor = scon.cursor()
