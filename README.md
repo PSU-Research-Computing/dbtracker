@@ -26,6 +26,12 @@ $ python setup.py install
 $ python setup.py develop
 ```
 
+This provides a `dbtracker` command that queries the ARCs databases and optionally saves these stats to postgres.
+
+```sh
+$ dbtracker -h
+```
+
 ## Configure
 
 `dbtracker` expects a `local_settings.py` inside `./dbtracker/local_settings`.  This repository has a `local_settings.example` file which can be duplicated and configured.  Do not check your `local_settings.py` into version control.
