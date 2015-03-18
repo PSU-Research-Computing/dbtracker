@@ -48,7 +48,7 @@ def mysql_stats(mysql_settings, scon=None, timestamp=None):
     cursor = con.cursor()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        cursor.execute("SELECT * FROM information_schema.tables")
+        cursor.execute("SELECT * FROM information_schema.tables WHERE TABLE_TYPE != 'VIEW'")
     tables = dictfetchall(cursor)
     if scon:
         save_mysql_stats(scon, tables, timestamp)
