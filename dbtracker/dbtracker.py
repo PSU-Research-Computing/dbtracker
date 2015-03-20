@@ -19,14 +19,17 @@ def cli(args):
             storage_con = postgresql_con('storage', 'dbtracker')
             logger.info('Connected to storage db')
             save_mysql_stats(storage_con, mysql_tables, now)
-            #save_pg_stats(storage_con, pg_tables, now)
+            save_pg_stats(storage_con, pg_tables, now)
             storage_con.commit()
-            logger.info('Stats commited to strage db!')
+            logger.info('Stats commited to strage db: ' + str(now))
         except psycopg2.DatabaseError as err:
             logger.warning(
                 "Can't connect to storage db: %s", err, extra={'e': err})
     else:
-        print('hi')
+        mysql_rows = count_mysql_stats(mysql_tables)
+        pprint.pprint(mysql_rows, width=1)
+        pg_rows = count_pg_stats(pg_tables)
+        pprint.pprint(pg_rows, width=1)
     #    mysql_stats('mysql', storage_con, now)
     #    pg_stats('postgresql', storage_con, now)
     #    storage_con.commit()
@@ -36,6 +39,40 @@ def cli(args):
     #    db_row_count.update(pg_stats('postgresql'))
     #    pprint.pprint(db_row_count, width=1)
     # return
+
+
+# Util
+
+
+def insert(scursor, date_time, db_name, schema_name, table_name, row_count):
+    scursor.execute(
+        """INSERT INTO stats (datetime, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
+        {'date': date_time, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
+    return date_time, db_name, schema_name, table_name, row_count
+
+
+def count_rows_in_tables(row_field, db_name_field):
+    def table_counter(tables):
+        dbs = {}
+        for table in tables:
+            if table[row_field]:
+                if table[db_name_field] in dbs:
+                    dbs[table[db_name_field]] += table[row_field]
+                else:
+                    dbs[table[db_name_field]] = table[row_field]
+        return dbs
+    return table_counter
+
+
+def dictfetchall(cursor):
+    "Returns all rows from a cursor as a dict"
+    # From
+    # https://github.com/PSU-OIT-ARC/django-arcutils/blob/master/arcutils/__init__.py#L82
+    desc = cursor.description
+    return [
+        dict(zip([col[0] for col in desc], row))
+        for row in cursor.fetchall()
+    ]
 
 
 # Mysql Functions
@@ -75,16 +112,7 @@ def save_mysql_stats(scon, tables, timestamp):
         )
     return
 
-
-def count_mysql_stats(tables):
-    dbs = {}
-    for table in tables:
-        if table['TABLE_ROWS']:
-            if table['TABLE_SCHEMA'] in dbs:
-                dbs[table['TABLE_SCHEMA']] += table['TABLE_ROWS']
-            else:
-                dbs[table['TABLE_SCHEMA']] = table['TABLE_ROWS']
-    return dbs
+count_mysql_stats = count_rows_in_tables('TABLE_ROWS', 'TABLE_SCHEMA')
 
 
 # Postgresql Functions
@@ -156,40 +184,4 @@ def save_pg_stats(scon, pg_tables, timestamp):
             sys.exit(1)
 
 
-def count_pg_stats(pg_settings, pg_dbs):
-    dbs = {}
-    for db in pg_dbs:
-        db_name = db.get("datname")
-        try:
-            con = postgresql(pg_settings, db_name)
-            cursor = con.cursor()
-            cursor.execute(
-                "SELECT schemaname,relname,n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;")
-            for table in dictfetchall(cursor):
-                if table['n_live_tup']:
-                    if db_name in dbs:
-                        dbs[db_name] += table['n_live_tup']
-                    else:
-                        dbs[db_name] = table['n_live_tup']
-        except psycopg2.DatabaseError as e:
-            logger.warning('Skipping: %s', db_name, extra={'e': e})
-    return dbs
-
-
-# Util
-def insert(scursor, date_time, db_name, schema_name, table_name, row_count):
-    scursor.execute(
-        """INSERT INTO stats (datetime, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
-        {'date': date_time, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
-    return date_time, db_name, schema_name, table_name, row_count
-
-
-def dictfetchall(cursor):
-    "Returns all rows from a cursor as a dict"
-    # From
-    # https://github.com/PSU-OIT-ARC/django-arcutils/blob/master/arcutils/__init__.py#L82
-    desc = cursor.description
-    return [
-        dict(zip([col[0] for col in desc], row))
-        for row in cursor.fetchall()
-    ]
+count_pg_stats = count_rows_in_tables('n_live_tup', 'db_name')
