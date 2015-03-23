@@ -5,7 +5,9 @@ import sys
 import logging
 import pprint
 import warnings
+from .console_graph import print_bars
 from .local_settings import DATABASES
+
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,11 @@ def cli(args):
                 "Can't connect to storage db: %s", err, extra={'e': err})
     else:
         mysql_rows = count_mysql_stats(mysql_tables)
-        pprint.pprint(mysql_rows, width=1)
         pg_rows = count_pg_stats(pg_tables)
-        pprint.pprint(pg_rows, width=1)
+        all_rows = pg_rows.copy()
+        all_rows.update(mysql_rows)
+        print_bars(mysql_rows)
+        print_bars(pg_rows)
     #    mysql_stats('mysql', storage_con, now)
     #    pg_stats('postgresql', storage_con, now)
     #    storage_con.commit()
@@ -111,7 +115,7 @@ def save_mysql_stats(scon, tables, timestamp):
             row_count=table.get('TABLE_ROWS') or 0,
         )
     return
-
+# TODO This is a closure.  Python has better ways of dealing with this
 count_mysql_stats = count_rows_in_tables('TABLE_ROWS', 'TABLE_SCHEMA')
 
 
@@ -159,9 +163,9 @@ def get_pg_db_tables(pg_settings, db_name):
         cursor.execute(
             "SELECT schemaname,relname,n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC;")
         pg_db_stats = dictfetchall(cursor)
-    except psycopg2.DatabaseError as e:
+    except psycopg2.DatabaseError as err:
         # Handle connection errors
-        logger.warning('Skipping: %s', db_name, extra={'e': e})
+        logger.warning('Skipping: %s', db_name, extra={'err': err})
         return None
     else:
         con.close()
@@ -183,5 +187,5 @@ def save_pg_stats(scon, pg_tables, timestamp):
             print('Error %s' % e)
             sys.exit(1)
 
-
+# TODO This is a closure.  Python has better ways of dealing with this
 count_pg_stats = count_rows_in_tables('n_live_tup', 'db_name')
