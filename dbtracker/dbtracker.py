@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 def cli(args):
     now = datetime.datetime.now()
-    mysql_tables = get_mysql_tables('mysql')
-    pg_tables = get_pg_tables('postgresql')
     if args.save:
+        mysql_tables = get_mysql_tables('mysql')
+        pg_tables = get_pg_tables('postgresql')
         try:
             storage_con = postgresql_con('storage', 'dbtracker')
             logger.info('Connected to storage db')
@@ -27,7 +27,21 @@ def cli(args):
         except psycopg2.DatabaseError as err:
             logger.warning(
                 "Can't connect to storage db: %s", err, extra={'e': err})
+    if args.growth:
+        try:
+            storage_con = postgresql_con('storage', 'dbtracker')
+            logger.info('Connected to storage db')
+            cursor = storage_con.cursor()
+            cursor.execute(
+                "SELECT DISTINCT datetime FROM stats ORDER BY datetime LIMIT 10;")
+            dates = dictfetchall(cursor)
+            pprint.pprint(dates, width=1)
+        except psycopg2.DatabaseError as err:
+            logger.warning(
+                "Can't connect to storage db: %s", err, extra={'e': err})
     else:
+        mysql_tables = get_mysql_tables('mysql')
+        pg_tables = get_pg_tables('postgresql')
         mysql_rows = count_mysql_stats(mysql_tables)
         pg_rows = count_pg_stats(pg_tables)
         all_rows = pg_rows.copy()
