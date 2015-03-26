@@ -15,39 +15,13 @@ logger = logging.getLogger(__name__)
 def cli(args):
     now = datetime.datetime.now()
     if args.save:
-        mysql_tables = get_mysql_tables('mysql')
-        pg_tables = get_pg_tables('postgresql')
-        try:
-            storage_con = postgresql_con('storage', 'dbtracker')
-            logger.info('Connected to storage db')
-            save_mysql_stats(storage_con, mysql_tables, now)
-            save_pg_stats(storage_con, pg_tables, now)
-            storage_con.commit()
-            logger.info('Stats commited to strage db: ' + str(now))
-        except psycopg2.DatabaseError as err:
-            logger.warning(
-                "Can't connect to storage db: %s", err, extra={'e': err})
-    if args.growth:
-        try:
-            storage_con = postgresql_con('storage', 'dbtracker')
-            logger.info('Connected to storage db')
-            cursor = storage_con.cursor()
-            cursor.execute(
-                "SELECT DISTINCT datetime FROM stats ORDER BY datetime LIMIT 10;")
-            dates = dictfetchall(cursor)
-            pprint.pprint(dates, width=1)
-        except psycopg2.DatabaseError as err:
-            logger.warning(
-                "Can't connect to storage db: %s", err, extra={'e': err})
+        save(args, now)
+    elif args.growth:
+        growth(args)
+    elif args.history:
+        history(args)
     else:
-        mysql_tables = get_mysql_tables('mysql')
-        pg_tables = get_pg_tables('postgresql')
-        mysql_rows = count_mysql_stats(mysql_tables)
-        pg_rows = count_pg_stats(pg_tables)
-        all_rows = pg_rows.copy()
-        all_rows.update(mysql_rows)
-        print_bars(mysql_rows)
-        print_bars(pg_rows)
+        raw_count(args)
     #    mysql_stats('mysql', storage_con, now)
     #    pg_stats('postgresql', storage_con, now)
     #    storage_con.commit()
@@ -58,6 +32,84 @@ def cli(args):
     #    pprint.pprint(db_row_count, width=1)
     # return
 
+
+def save(args, timestamp):
+    mysql_tables = get_mysql_tables('mysql')
+    pg_tables = get_pg_tables('postgresql')
+    try:
+        storage_con = postgresql_con('storage', 'dbtracker')
+        logger.info('Connected to storage db')
+        save_mysql_stats(storage_con, mysql_tables, timestamp)
+        save_pg_stats(storage_con, pg_tables, timestamp)
+        storage_con.commit()
+        logger.info('Stats commited to strage db: ' + str(timestamp))
+    except psycopg2.DatabaseError as err:
+        logger.warning(
+            "Can't connect to storage db: %s", err, extra={'e': err})
+
+
+def get_timestamps(number):
+    """
+    Returns a list of the last number of timestamps
+    """
+    try:
+        storage_con = postgresql_con('storage', 'dbtracker')
+        logger.info('Connected to storage db')
+        cursor = storage_con.cursor()
+        cursor.execute(
+            "SELECT DISTINCT datetime FROM stats ORDER BY datetime DESC \
+            LIMIT %(limit)s;", {'limit': number})
+        timestamps = dictfetchall(cursor)
+        logger.info('Found list of unique timestamps')
+        return timestamps
+    except psycopg2.DatabaseError as err:
+        logger.warning(
+            "Can't connect to storage db: %s", err, extra={'e': err})
+
+
+def get_timestamp(datetime):
+    """
+    Return all the rows that have the datetime timestamp
+    """
+    try:
+        storage_con = postgresql_con('storage', 'dbtracker')
+        logger.info('Connected to storage db')
+        cursor = storage_con.cursor()
+        cursor.execute(
+            "SELECT * FROM stats WHERE datetime = %(date)s \
+            ORDER BY row_count;", {'date': datetime})
+        rows = dictfetchall(cursor)
+        logger.info('Found list of timestamp')
+        return rows
+    except psycopg2.DatabaseError as err:
+        logger.warning(
+            "Can't connect to storage db: %s", err, extra={'e': err})
+
+
+def history(args):
+    timestamps = get_timestamps(args.history)
+    for i, timestamp in enumerate(timestamps):
+        date = timestamp['datetime']
+        print("{}: {} {}".format(i, date, date.strftime("%A")))
+
+
+def growth(args):
+    timestamps = get_timestamps(args.growth)
+    stamp = timestamps[-1]['datetime']
+    pprint.pprint(get_timestamp(stamp), width=1)
+
+
+def raw_count(args):
+    mysql_tables = get_mysql_tables('mysql')
+    pg_tables = get_pg_tables('postgresql')
+    mysql_rows = count_mysql_stats(mysql_tables)
+    pg_rows = count_pg_stats(pg_tables)
+    all_rows = pg_rows.copy()
+    all_rows.update(mysql_rows)
+    print("========= MySQL Count ==========")
+    print_bars(mysql_rows)
+    print("======= PostgreSQL Count =======")
+    print_bars(pg_rows)
 
 # Util
 
