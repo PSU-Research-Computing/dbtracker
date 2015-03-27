@@ -15,25 +15,16 @@ logger = logging.getLogger(__name__)
 def cli(args):
     now = datetime.datetime.now()
     if args.save:
-        save(args, now)
+        save(now)
     elif args.growth:
-        growth(args)
+        growth(args, now)
     elif args.history:
         history(args)
     else:
-        raw_count(args)
-    #    mysql_stats('mysql', storage_con, now)
-    #    pg_stats('postgresql', storage_con, now)
-    #    storage_con.commit()
-    #    logger.info('Stats commited to strage db!')
-    # else:
-    #    db_row_count = mysql_stats('mysql').copy()
-    #    db_row_count.update(pg_stats('postgresql'))
-    #    pprint.pprint(db_row_count, width=1)
-    # return
+        print_raw_count()
 
 
-def save(args, timestamp):
+def save(timestamp):
     mysql_tables = get_mysql_tables('mysql')
     pg_tables = get_pg_tables('postgresql')
     try:
@@ -67,7 +58,7 @@ def get_timestamps(number):
             "Can't connect to storage db: %s", err, extra={'e': err})
 
 
-def get_timestamp(datetime):
+def get_timestamp(datetime, db_provider):
     """
     Return all the rows that have the datetime timestamp
     """
@@ -77,7 +68,7 @@ def get_timestamp(datetime):
         cursor = storage_con.cursor()
         cursor.execute(
             "SELECT * FROM stats WHERE datetime = %(date)s \
-            ORDER BY row_count;", {'date': datetime})
+            AND db_provider = %(db)s ORDER BY row_count;", {'date': datetime, 'db': db_provider})
         rows = dictfetchall(cursor)
         logger.info('Found list of timestamp')
         return rows
@@ -90,22 +81,46 @@ def history(args):
     timestamps = get_timestamps(args.history)
     for i, timestamp in enumerate(timestamps):
         date = timestamp['datetime']
-        print("{}: {} {}".format(i, date, date.strftime("%A")))
+        print("{}: {} {}".format(i + 1, date, date.strftime("%A")))
 
 
-def growth(args):
+def growth(args, now):
     timestamps = get_timestamps(args.growth)
     stamp = timestamps[-1]['datetime']
-    pprint.pprint(get_timestamp(stamp), width=1)
+    pg_timestamp_dump = get_timestamp(stamp, 'pg')
+    mysql_timestamp_dump = get_timestamp(stamp, 'mysql')
+    pg_timestamp_count = get_timestamp_rowcount(pg_timestamp_dump)
+    mysql_timestamp_count = get_timestamp_rowcount(mysql_timestamp_dump)
+    pg_current_count = get_pg_current_count()
+    mysql_current_count = get_mysql_current_count()
+    pg_difference = {}
+    for key in pg_current_count:
+        pg_difference[key] = pg_current_count[
+            key] - pg_timestamp_count.get(key, 0)
+    print_bars(pg_difference)
+    mysql_difference = {}
+    for key in mysql_current_count:
+        mysql_difference[key] = mysql_current_count[
+            key] - mysql_timestamp_count.get(key, 0)
+    print_bars(mysql_difference)
+    print(str(now) + " - " + str(stamp))
 
 
-def raw_count(args):
-    mysql_tables = get_mysql_tables('mysql')
+def get_pg_current_count():
     pg_tables = get_pg_tables('postgresql')
-    mysql_rows = count_mysql_stats(mysql_tables)
     pg_rows = count_pg_stats(pg_tables)
-    all_rows = pg_rows.copy()
-    all_rows.update(mysql_rows)
+    return pg_rows
+
+
+def get_mysql_current_count():
+    mysql_tables = get_mysql_tables('mysql')
+    mysql_rows = count_mysql_stats(mysql_tables)
+    return mysql_rows
+
+
+def print_raw_count():
+    mysql_rows = get_mysql_current_count()
+    pg_rows = get_pg_current_count()
     print("========= MySQL Count ==========")
     print_bars(mysql_rows)
     print("======= PostgreSQL Count =======")
@@ -114,10 +129,10 @@ def raw_count(args):
 # Util
 
 
-def insert(scursor, date_time, db_name, schema_name, table_name, row_count):
+def insert(scursor, date_time, db_provider, db_name, schema_name, table_name, row_count):
     scursor.execute(
-        """INSERT INTO stats (datetime, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
-        {'date': date_time, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
+        """INSERT INTO stats (datetime, db_provider, db_name, schema_name, table_name, row_count) VALUES (%(date)s, %(db_provider)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
+        {'date': date_time, 'db_provider': db_provider, 'dbname': db_name, 'schema': schema_name, 'table': table_name, 'rows': row_count})
     return date_time, db_name, schema_name, table_name, row_count
 
 
@@ -132,6 +147,9 @@ def count_rows_in_tables(row_field, db_name_field):
                     dbs[table[db_name_field]] = table[row_field]
         return dbs
     return table_counter
+
+# TODO This is a closure.  Python has better ways of dealing with this
+get_timestamp_rowcount = count_rows_in_tables('row_count', 'db_name')
 
 
 def dictfetchall(cursor):
@@ -164,6 +182,19 @@ def get_mysql_tables(mysql_settings):
         cursor.execute(
             "SELECT * FROM information_schema.tables WHERE TABLE_TYPE != 'VIEW'")
     tables = dictfetchall(cursor)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for table in tables:
+            try:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM `%(db)s`.`%(table)s`" %
+                    {"db": table.get("TABLE_SCHEMA"), "table": table.get("TABLE_NAME")})
+                row_count = dictfetchall(cursor)[0]['COUNT(*)']
+            except pymysql.err.InternalError as err:
+                logger.warning('Skipping: %s', "{}.{}".format(
+                    table.get("TABLE_SCHEMA"), table.get("TABLE_NAME")), extra={'err': err})
+            finally:
+                table['row_count'] = row_count or 0
     con.close()
     logger.info('Mysql stats collected.')
     return tables
@@ -174,15 +205,16 @@ def save_mysql_stats(scon, tables, timestamp):
     for table in tables:
         insert(
             scursor=scursor,
+            db_provider="mysql",
             date_time=timestamp,
             schema_name="",
             db_name=table.get('TABLE_SCHEMA'),
             table_name=table.get('TABLE_NAME'),
-            row_count=table.get('TABLE_ROWS') or 0,
+            row_count=table.get('row_count') or 0,
         )
     return
 # TODO This is a closure.  Python has better ways of dealing with this
-count_mysql_stats = count_rows_in_tables('TABLE_ROWS', 'TABLE_SCHEMA')
+count_mysql_stats = count_rows_in_tables('row_count', 'TABLE_SCHEMA')
 
 
 # Postgresql Functions
@@ -243,6 +275,7 @@ def save_pg_stats(scon, pg_tables, timestamp):
     for table in pg_tables:
         try:
             insert(scursor=scursor,
+                   db_provider="pg",
                    date_time=timestamp,
                    db_name=table.get('db_name'),
                    table_name=table.get('relname'),

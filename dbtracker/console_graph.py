@@ -1,13 +1,13 @@
 import os
+from termcolor import colored
 
 
 def get_scale_factor(value_dict, max_length=os.get_terminal_size().columns):
     """
     Gets the scale factor from a dict of keys with numerical values
     """
-    max_key = max(value_dict, key=value_dict.get)
-    max_value = value_dict[max_key]
-    return max_length / max_value
+    max_value = max(value_dict.values(), key=abs)
+    return max_length / abs(max_value)
 
 
 def print_bars(value_dict):
@@ -20,13 +20,19 @@ def print_bars(value_dict):
     bar_len = os.get_terminal_size().columns - align_len
     scale_factor = get_scale_factor(value_dict, bar_len)
     for key, value in value_dict.items():
-        bar_length = int(value * scale_factor)
+        bar_length = int(abs(value) * scale_factor)
         bar_string = '#' * bar_length
         prefix_len = len(prefix_string.format(key=key, value=value, pad=' '))
         pad_len = align_len - prefix_len
         prefix = prefix_string.format(
             key=key, value=value, pad=' ' * pad_len)
-        print(prefix + bar_string)
+        if value > 0:
+            colorized = colored(prefix + bar_string, "green")
+        elif value < 0:
+            colorized = colored(prefix + bar_string, "red")
+        else:
+            colorized = prefix + bar_string
+        print(colorized)
 
 
 def get_align_len(value_dict, prefix_string="{key}{pad}({value})"):

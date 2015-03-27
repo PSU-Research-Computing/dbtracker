@@ -12,7 +12,7 @@ setup(
     license="MIT",
     author="Bret Comnes",
     packages=find_packages(),
-    install_requires=["psycopg2", "pymysql"],
+    install_requires=["psycopg2", "pymysql", "termcolor"],
     long_description=long_description,
     entry_points={
         'console_scripts': ['dbtracker=dbtracker:main'],
