@@ -189,11 +189,15 @@ def dictfetchall(cursor):
 
 # Mysql Functions
 def mysql_con(mysql_settings):
-    conn = pymysql.connect(
-        host=DATABASES.get(mysql_settings).get('HOST'),
-        password=DATABASES.get(mysql_settings).get('PASSWORD'),
-        user=DATABASES.get(mysql_settings).get('USER')
-    )
+    try:
+        conn = pymysql.connect(
+            host=DATABASES.get(mysql_settings).get('HOST'),
+            password=DATABASES.get(mysql_settings).get('PASSWORD'),
+            user=DATABASES.get(mysql_settings).get('USER')
+        )
+    except pymysql.err.OperationalError as e:
+        logger.error("Error connecting to mySQL")
+        return None
     return conn
 
 
