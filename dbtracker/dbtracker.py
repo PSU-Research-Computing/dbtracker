@@ -17,18 +17,31 @@ def cli(args):
     if args.save:
         save(now)
     elif args.growth:
-        growth(args.growth)
+        d1, d2 = get_stamps(tf=args.growth)
+        growth(d1, d2)
     elif args.history:
         history(args)
     elif args.count:
         print_raw_count()
     elif args.range:
         r = args.range.split('-')
-        if len(r) == 2:
-            print(int(r[1]), int(r[0]))
-            growth(int(r[1]), int(r[0]))
+        if len(r) == 1:
+            d1, d2 = get_stamps(1, int(r[0]))
+        elif len(r) == 2:
+            d1, d2 = get_stamps(int(r[0]), int(r[1]))
         else:
             logger.warning("Cant parse range")
+            return None
+        growth(d1, d2)
+    elif args.date:
+        r = args.date.split(' - ')
+        if len(r) == 1:
+            d1, d2 = get_stamps(1)
+            growth(d1, r[1])
+        elif len(r) == 2:
+            growth(r[0], r[1])
+        else:
+            logger.warning("Can't parse date range")
     else:
         print_last_run()
 
@@ -93,29 +106,33 @@ def history(args):
         print("{}: {} {}".format(i + 1, date, date.strftime("%A")))
 
 
-def growth(tf=2, ti=1):
+def get_stamps(ti=1, tf=2):
     timestamps = get_timestamps(tf)
-    stamp = timestamps[-1]['datetime']
-    last = timestamps[ti - 1]['datetime']
-    pg_timestamp_count = get_timestamp_rowcount(get_timestamp(stamp, 'pg'))
+    d1 = timestamps[ti - 1]['datetime']  # last
+    d2 = timestamps[-1]['datetime']  # stamp
+    return d1, d2
+
+
+def growth(d1, d2):
+    pg_timestamp_count = get_timestamp_rowcount(get_timestamp(d2, 'pg'))
     mysql_timestamp_count = get_timestamp_rowcount(
-        get_timestamp(stamp, 'mysql'))
-    pg_current_count = get_timestamp_rowcount(get_timestamp(last, 'pg'))
+        get_timestamp(d2, 'mysql'))
+    pg_current_count = get_timestamp_rowcount(get_timestamp(d1, 'pg'))
     mysql_current_count = get_timestamp_rowcount(
-        get_timestamp(last, 'mysql'))
+        get_timestamp(d1, 'mysql'))
     pg_difference = {}
     for key in pg_current_count:
         pg_difference[key] = pg_current_count[
             key] - pg_timestamp_count.get(key, 0)
     print("======= PostgreSQL Difference =======")
-    print(str(last) + " - " + str(stamp))
+    print(str(d1) + " - " + str(d2))
     print_bars(pg_difference)
     mysql_difference = {}
     for key in mysql_current_count:
         mysql_difference[key] = mysql_current_count[
             key] - mysql_timestamp_count.get(key, 0)
     print("========= MySQL Difference ==========")
-    print(str(last) + " - " + str(stamp))
+    print(str(d1) + " - " + str(d2))
     print_bars(mysql_difference)
 
 
