@@ -4,7 +4,6 @@ import argparse
 
 
 def main(argv=None):
-    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Queries MySQL and PostgreSQL for stats.")
     parser.add_argument("-S", "--save",
@@ -21,5 +20,11 @@ def main(argv=None):
                         help="compares date to last run")
     parser.add_argument("-D", "--date-range", type=str,
                         help="compares stats between two dates")
+    parser.add_argument("-s", "--silent", action="store_true",
+                        help="turns logging levels down to ")
     args = parser.parse_args(argv)
+    if args.silent:
+        logging.basicConfig(level=logging.ERROR)
+    else:
+        logging.basicConfig(level=logging.INFO)
     cli(args)
