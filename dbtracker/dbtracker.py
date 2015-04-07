@@ -17,11 +17,20 @@ def cli(args):
     if args.save:
         save(now)
     elif args.growth:
-        growth(args, now)
+        growth(args.growth)
     elif args.history:
         history(args)
-    else:
+    elif args.count:
         print_raw_count()
+    elif args.range:
+        r = args.range.split('-')
+        if len(r) == 2:
+            print(int(r[1]), int(r[0]))
+            growth(int(r[1]), int(r[0]))
+        else:
+            logger.warning("Cant parse range")
+    else:
+        print_last_run()
 
 
 def save(timestamp):
@@ -84,26 +93,30 @@ def history(args):
         print("{}: {} {}".format(i + 1, date, date.strftime("%A")))
 
 
-def growth(args, now):
-    timestamps = get_timestamps(args.growth)
+def growth(tf=2, ti=1):
+    timestamps = get_timestamps(tf)
     stamp = timestamps[-1]['datetime']
-    pg_timestamp_dump = get_timestamp(stamp, 'pg')
-    mysql_timestamp_dump = get_timestamp(stamp, 'mysql')
-    pg_timestamp_count = get_timestamp_rowcount(pg_timestamp_dump)
-    mysql_timestamp_count = get_timestamp_rowcount(mysql_timestamp_dump)
-    pg_current_count = get_pg_current_count()
-    mysql_current_count = get_mysql_current_count()
+    last = timestamps[ti - 1]['datetime']
+    pg_timestamp_count = get_timestamp_rowcount(get_timestamp(stamp, 'pg'))
+    mysql_timestamp_count = get_timestamp_rowcount(
+        get_timestamp(stamp, 'mysql'))
+    pg_current_count = get_timestamp_rowcount(get_timestamp(last, 'pg'))
+    mysql_current_count = get_timestamp_rowcount(
+        get_timestamp(last, 'mysql'))
     pg_difference = {}
     for key in pg_current_count:
         pg_difference[key] = pg_current_count[
             key] - pg_timestamp_count.get(key, 0)
+    print("======= PostgreSQL Difference =======")
+    print(str(last) + " - " + str(stamp))
     print_bars(pg_difference)
     mysql_difference = {}
     for key in mysql_current_count:
         mysql_difference[key] = mysql_current_count[
             key] - mysql_timestamp_count.get(key, 0)
+    print("========= MySQL Difference ==========")
+    print(str(last) + " - " + str(stamp))
     print_bars(mysql_difference)
-    print(str(now) + " - " + str(stamp))
 
 
 def get_pg_current_count():
@@ -125,6 +138,17 @@ def print_raw_count():
     print_bars(mysql_rows)
     print("======= PostgreSQL Count =======")
     print_bars(pg_rows)
+
+
+def print_last_run():
+    lastrun = get_timestamps(1)[0]["datetime"]
+    pg_last = get_timestamp_rowcount(get_timestamp(lastrun, 'pg'))
+    mysql_last = get_timestamp_rowcount(get_timestamp(lastrun, 'mysql'))
+    print("========= MySQL Count ==========")
+    print_bars(mysql_last)
+    print("======= PostgreSQL Count =======")
+    print_bars(pg_last)
+
 
 # Util
 
@@ -182,6 +206,13 @@ def get_mysql_tables(mysql_settings):
         cursor.execute(
             "SELECT * FROM information_schema.tables WHERE TABLE_TYPE != 'VIEW'")
     tables = dictfetchall(cursor)
+    tables = add_mysql_row_count(tables, cursor)
+    con.close()
+    logger.info('Mysql stats collected.')
+    return tables
+
+
+def add_mysql_row_count(tables, cursor):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for table in tables:
@@ -195,9 +226,7 @@ def get_mysql_tables(mysql_settings):
                     table.get("TABLE_SCHEMA"), table.get("TABLE_NAME")), extra={'err': err})
             finally:
                 table['row_count'] = row_count or 0
-    con.close()
-    logger.info('Mysql stats collected.')
-    return tables
+        return tables
 
 
 def save_mysql_stats(scon, tables, timestamp):

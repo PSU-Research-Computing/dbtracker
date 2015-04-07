@@ -7,7 +7,11 @@ def get_scale_factor(value_dict, max_length=os.get_terminal_size().columns):
     Gets the scale factor from a dict of keys with numerical values
     """
     max_value = max(value_dict.values(), key=abs)
-    return max_length / abs(max_value)
+    try:
+        scale = max_length / abs(max_value)
+    except ZeroDivisionError:
+        scale = 1
+    return scale
 
 
 def print_bars(value_dict):
