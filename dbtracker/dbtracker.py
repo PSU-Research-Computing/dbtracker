@@ -3,16 +3,23 @@ import psycopg2
 import datetime
 import sys
 import logging
-import pprint
 import warnings
 from .console_graph import print_bars
-from .local_settings import DATABASES
+from .configurator import read_config
 
+config = None
+read_config().sections()
 
 logger = logging.getLogger(__name__)
 
 
 def cli(args):
+    global config
+    if args.config:
+        config = read_config(file=args.config)
+    else:
+        config = read_config()
+    config.sections()
     now = datetime.datetime.now()
     if args.save:
         save(now)
@@ -42,6 +49,7 @@ def cli(args):
             growth(r[0], r[1])
         else:
             logger.warning("Can't parse date range")
+            return None
     else:
         print_last_run()
 
@@ -208,9 +216,9 @@ def dictfetchall(cursor):
 def mysql_con(mysql_settings):
     try:
         conn = pymysql.connect(
-            host=DATABASES.get(mysql_settings).get('HOST'),
-            password=DATABASES.get(mysql_settings).get('PASSWORD'),
-            user=DATABASES.get(mysql_settings).get('USER')
+            host=config[mysql_settings]['host'],
+            password=config[mysql_settings]['password'],
+            user=config[mysql_settings]['user']
         )
     except pymysql.err.OperationalError as e:
         logger.error("Error connecting to mySQL")
@@ -270,9 +278,9 @@ count_mysql_stats = count_rows_in_tables('row_count', 'TABLE_SCHEMA')
 # Postgresql Functions
 def postgresql_con(pg_settings, db_name):
     conn = psycopg2.connect(
-        host=DATABASES.get(pg_settings).get('HOST'),
-        password=DATABASES.get(pg_settings).get('PASSWORD'),
-        user=DATABASES.get(pg_settings).get('USER'),
+        host=config[pg_settings]['host'],
+        password=config[pg_settings]['password'],
+        user=config[pg_settings]['user'],
         database=db_name
     )
     return conn

@@ -22,6 +22,8 @@ def main(argv=None):
                         help="compares stats between two dates")
     parser.add_argument("-s", "--silent", action="store_true",
                         help="turns logging levels down to ")
+    parser.add_argument("-C", "--config", type=str,
+                        help="use a custom configuration file path")
     args = parser.parse_args(argv)
     if args.silent:
         logging.basicConfig(level=logging.ERROR)
