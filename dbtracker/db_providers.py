@@ -1,5 +1,9 @@
 import pymysql
 import psycopg2
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class Database(object):
@@ -34,11 +38,33 @@ class Mysql(Database):
     def __init__(self, host, user, password):
         super().__init__(host, user, password)
 
+    def get_tables(self):
+        pass
+
+    def connection(self):
+        try:
+            self._conn = pymysql.connect(
+                host=self.host,
+                password=self.password,
+                user=self.user)
+        except pymysql.err.OperationalError:
+            logger.error("Error connecting to mySQL")
+
 
 class Postgres(Database):
 
     def __init__(self, host, user, password):
         super().__init__(host, user, password)
+
+    def connection(self, database):
+        try:
+            self._conn = psycopg2.connect(
+                host=self.host,
+                password=self.password,
+                user=self.user,
+                database=database)
+        except:
+            logger.error("Error connecting to postgreSQL")
 
 
 class Storage(Postgres):
