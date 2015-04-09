@@ -56,6 +56,9 @@ class Postgres(Database):
     def __init__(self, host, user, password):
         super().__init__(host, user, password)
 
+    def get_tables(self):
+        pass
+
     def connection(self, database):
         try:
             self._conn = psycopg2.connect(
