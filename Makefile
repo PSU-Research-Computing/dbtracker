@@ -13,3 +13,6 @@ init:
 
 env:
 	virtualenv -p python3 env
+
+test:
+	python -m unittest dbtracker/tests/*.py

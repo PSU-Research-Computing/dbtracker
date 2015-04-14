@@ -1,5 +1,7 @@
+import pymysql
 import psycopg2
 import logging
+import warnings
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
@@ -44,10 +46,9 @@ class Mysql(Database):
         logger.info('Collecting mySQL stats')
         try:
             with pymysql.connect(self.host, self.user, self.password) as conn:
-                with conn.cursor() as cursor:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        yield cursor
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    yield conn
         except pymysql.err.OperationalError as e:
             logger.error("mySQL error: %s" % e)
 
@@ -88,8 +89,7 @@ class Postgres(Database):
         try:
             with psycopg2.connect(self.host, self.user, self.password,
                                   database=database) as conn:
-                with conn.cursor() as cursor:
-                    yield cursor
+                yield conn
         except psycopg2.DatabaseError as err:
             # Handle connection errors
             logger.warning('Skipping: %s', database, extra={'err': err})
@@ -100,13 +100,13 @@ class Postgres(Database):
         with self.connection(database='postgres') as cursor:
             cursor.execute("SELECT datname FROM pg_database WHERE \
                 datistemplate = false")
-            return dictfetchall(cursor)
+            return self.dictfetchall(cursor)
 
-    def count_rows(database):
+    def count_rows(self, database):
         with self.connection(database=database) as cursor:
             cursor.execute("SELECT schemaname,relname,n_live_tup FROM \
                 pg_stat_user_tables ORDER BY n_live_tup DESC;")
-            return dictfetchall(cursor)
+            return self.dictfetchall(cursor)
 
     def get_tables(self):
         pg_dbs = self.get_dbs
@@ -127,7 +127,7 @@ class Storage(Postgres):
         super().__init__(host, user, password)
 
     def insert(self, date_time, db_provider, db_name, schema_name, table_name, row_count):
-        with self._conn:
+        pass
 
     def save_db_dump(self):
         pass
