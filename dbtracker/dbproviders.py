@@ -45,18 +45,18 @@ class Mysql(Database):
     def connection(self):
         logger.info('Collecting mySQL stats')
         try:
-            with pymysql.connect(self.host, self.user, self.password) as conn:
+            # mysql conext manager returns cursor
+            with pymysql.connect(self.host, self.user, self.password) as curs:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    yield conn
+                    yield curs
         except pymysql.err.OperationalError as e:
             logger.error("mySQL error: %s" % e)
 
     def get_tables(self):
         with self.connection() as cursor:
-            cursor = self.connection()
-            cursor.execute("SELECT * FROM information_schema.tables \
-                WHERE \TABLE_TYPE != 'VIEW'")
+            cursor.execute("SELECT * FROM information_schema.tables WHERE \
+                TABLE_TYPE != 'VIEW'")
             tables = self.dictfetchall(cursor)
             tables = self.count_rows(cursor, tables)
             logger.info('mySQL stats collected')
@@ -69,9 +69,9 @@ class Mysql(Database):
                     "SELECT COUNT(*) FROM `%(db)s`.`%(table)s`" %
                     {"db": table.get("TABLE_SCHEMA"),
                      "table": table.get("TABLE_NAME")})
-                row_count = dictfetchall(cursor)[0]['COUNT(*)']
+                row_count = self.dictfetchall(cursor)[0]['COUNT(*)']
             except pymysql.err.InternalError as err:
-                logger.warning('Skipping: %s', "{}.{}".format(
+                logger.info('Skipping: %s', "{}.{}".format(
                     table.get("TABLE_SCHEMA"), table.get("TABLE_NAME")),
                     extra={'err': err})
             finally:
@@ -87,14 +87,17 @@ class Postgres(Database):
     @contextmanager
     def connection(self, database):
         try:
-            with psycopg2.connect(self.host, self.user, self.password,
+            with psycopg2.connect(host=self.host,
+                                  user=self.user,
+                                  password=self.password,
                                   database=database) as conn:
-                yield conn
+                with conn.cursor() as curs:
+                    yield curs
         except psycopg2.DatabaseError as err:
             # Handle connection errors
-            logger.warning('Skipping: %s', database, extra={'err': err})
-        except:
-            logger.error("Error connecting to postgreSQL")
+            logger.info('Skipping: %s', database, extra={'err': err})
+        except Exception as e:
+            logger.error(e)
 
     def get_dbs(self):
         with self.connection(database='postgres') as cursor:
@@ -103,17 +106,20 @@ class Postgres(Database):
             return self.dictfetchall(cursor)
 
     def count_rows(self, database):
-        with self.connection(database=database) as cursor:
-            cursor.execute("SELECT schemaname,relname,n_live_tup FROM \
-                pg_stat_user_tables ORDER BY n_live_tup DESC;")
-            return self.dictfetchall(cursor)
+        try:
+            with self.connection(database=database) as cursor:
+                cursor.execute("SELECT schemaname,relname,n_live_tup FROM \
+                    pg_stat_user_tables ORDER BY n_live_tup DESC;")
+                return self.dictfetchall(cursor)
+        except RuntimeError:
+            return
 
     def get_tables(self):
-        pg_dbs = self.get_dbs
+        pg_dbs = self.get_dbs()
         pg_tables = []
         for db in pg_dbs:
             db_name = db.get("datname")
-            pg_db_tables = self.count_rows()
+            pg_db_tables = self.count_rows(database=db_name)
             if pg_db_tables:
                 for table in pg_db_tables:
                     table['db_name'] = db_name
