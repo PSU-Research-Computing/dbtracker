@@ -2,6 +2,7 @@ import pymysql
 import psycopg2
 import logging
 import warnings
+import datetime
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
@@ -24,15 +25,12 @@ class Database(object):
             for row in cursor.fetchall()]
 
     def count_rows(self):
-        pass
+        raise NotImplementedError
 
     def connection(self):
         raise NotImplementedError
 
     def get_tables(self):
-        raise NotImplementedError
-
-    def query_for_tables(self, cursor):
         raise NotImplementedError
 
 
@@ -53,14 +51,8 @@ class Mysql(Database):
         except pymysql.err.OperationalError as e:
             logger.error("mySQL error: %s" % e)
 
-    def get_tables(self):
-        with self.connection() as cursor:
-            cursor.execute("SELECT * FROM information_schema.tables WHERE \
-                TABLE_TYPE != 'VIEW'")
-            tables = self.dictfetchall(cursor)
-            tables = self.count_rows(cursor, tables)
-            logger.info('mySQL stats collected')
-            return tables
+    def get_dbs(self):
+        pass
 
     def count_rows(self, cursor, tables):
         for table in tables:
@@ -76,7 +68,28 @@ class Mysql(Database):
                     extra={'err': err})
             finally:
                 table['row_count'] = row_count or 0
-            return tables
+        return tables
+
+    def normalize(self, tables):
+        normalized = []
+        for table in tables:
+            row = {}
+            row["db_provider"] = "mysql"
+            row["db_name"] = table["TABLE_SCHEMA"]
+            row["table_name"] = table["TABLE_NAME"]
+            row["schema_name"] = ""
+            row["row_count"] = table["row_count"]
+            normalized.append(row)
+        return normalized
+
+    def get_tables(self):
+        with self.connection() as cursor:
+            cursor.execute("SELECT * FROM information_schema.tables WHERE \
+                TABLE_TYPE != 'VIEW'")
+            tables = self.dictfetchall(cursor)
+            tables = self.count_rows(cursor, tables)
+            logger.info('mySQL stats collected')
+            return self.normalize(tables)
 
 
 class Postgres(Database):
@@ -112,7 +125,20 @@ class Postgres(Database):
                     pg_stat_user_tables ORDER BY n_live_tup DESC;")
                 return self.dictfetchall(cursor)
         except RuntimeError:
+            # Skip when there are connection errors
             return
+
+    def normalize(self, tables):
+        normalized = []
+        for table in tables:
+            row = {}
+            row["db_provider"] = "pg"
+            row["db_name"] = table["db_name"]
+            row["table_name"] = table["relname"]
+            row["schema_name"] = table["schemaname"]
+            row["row_count"] = table["n_live_tup"]
+            normalized.append(row)
+        return normalized
 
     def get_tables(self):
         pg_dbs = self.get_dbs()
@@ -124,19 +150,27 @@ class Postgres(Database):
                 for table in pg_db_tables:
                     table['db_name'] = db_name
                 pg_tables = pg_tables + pg_db_tables
-        return pg_tables
+        return self.normalize(pg_tables)
 
 
 class Storage(Postgres):
 
-    def __init__(self, host, user, password):
+    def __init__(self, host, user, password, database):
         super().__init__(host, user, password)
+        self.database = database
 
-    def insert(self, date_time, db_provider, db_name, schema_name, table_name, row_count):
-        pass
+    def insert(self, cursor, date_time, db_provider, db_name, schema_name,
+               table_name, row_count):
+        cursor.execute("""INSERT INTO stats (datetime, db_provider, db_name, \
+            schema_name, table_name, row_count) VALUES (%(date)s, \
+            %(db_provider)s, %(dbname)s, %(schema)s, %(table)s, %(rows)s)""",
+                       {'date': date_time, 'db_provider': db_provider,
+                        'dbname': db_name, 'schema': schema_name,
+                        'table': table_name, 'rows': row_count})
 
-    def save_db_dump(self):
-        pass
+    def save_db_dump(self, *dumps):
+        now = datetime.datetime.now()
+        print(itertools.chain.from_iterable(dumps)
 
     def get_history(self):
         pass
