@@ -3,6 +3,8 @@ import psycopg2
 import logging
 import warnings
 import datetime
+import itertools
+import sys
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
@@ -170,7 +172,21 @@ class Storage(Postgres):
 
     def save_db_dump(self, *dumps):
         now = datetime.datetime.now()
-        print(itertools.chain.from_iterable(dumps)
+        tables = list(itertools.chain.from_iterable(dumps))
+        with self.connection(self.database) as cursor:
+            for table in tables:
+                try:
+                    self.insert(cursor=cursor,
+                                date_time=now,
+                                db_provider=table["db_provider"],
+                                db_name=table["db_name"],
+                                schema_name=table["schema_name"],
+                                table_name=table["table_name"],
+                                row_count=table["row_count"])
+                except psycopg2.DatabaseError as e:
+                    # handle insert errors
+                    print('Error %s' % e)
+                    sys.exit(1)
 
     def get_history(self):
         pass

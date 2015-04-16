@@ -12,7 +12,7 @@ init:
 	psql $(DEFAULT_DB_NAME) < sql.sql
 
 env:
-	virtualenv -p python3 env
+	virtualenv -p python3 --no-site-packages env
 
 test:
 	python -m unittest dbtracker/tests/*.py
