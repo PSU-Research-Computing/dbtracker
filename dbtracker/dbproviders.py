@@ -35,6 +35,9 @@ class Database(object):
     def get_tables(self):
         raise NotImplementedError
 
+    def db_rowcount(self):
+        raise NotImplementedError
+
 
 class Mysql(Database):
 
@@ -52,9 +55,6 @@ class Mysql(Database):
                     yield curs
         except pymysql.err.OperationalError as e:
             logger.error("mySQL error: %s" % e)
-
-    def get_dbs(self):
-        pass
 
     def count_rows(self, cursor, tables):
         for table in tables:
@@ -92,6 +92,9 @@ class Mysql(Database):
             tables = self.count_rows(cursor, tables)
             logger.info('mySQL stats collected')
             return self.normalize(tables)
+
+    def db_rowcount(self):
+        pass
 
 
 class Postgres(Database):
@@ -154,6 +157,9 @@ class Postgres(Database):
                 pg_tables = pg_tables + pg_db_tables
         return self.normalize(pg_tables)
 
+    def db_rowcount(self):
+        pass
+
 
 class Storage(Postgres):
 
@@ -188,8 +194,20 @@ class Storage(Postgres):
                     print('Error %s' % e)
                     sys.exit(1)
 
-    def get_history(self):
-        pass
+    def get_history(self, number):
+        with self.connection(self.database) as cursor:
+            cursor.execute(
+                "SELECT DISTINCT datetime FROM stats ORDER BY datetime DESC \
+                LIMIT %(limit)s;", {'limit': number})
+            return self.dictfetchall(cursor)
 
-    def get_timestamp(self):
+    def get_timestamp(self, db_provider):
+        with self.connection(self.database) as cursor:
+            cursor.execute(
+                "SELECT * FROM stats WHERE datetime = %(date)s AND \
+                db_provider = %(db)s ORDER BY row_count;",
+                {'date': datetime, 'db': db_provider})
+            return self.dictfetchall(cursor)
+
+    def db_rowcount(self):
         pass
