@@ -35,8 +35,15 @@ class Database(object):
     def get_tables(self):
         raise NotImplementedError
 
-    def db_rowcount(self):
-        raise NotImplementedError
+    def db_rowcount(self, tables):
+        dbs = {}
+        for table in tables:
+            if table["row_count"]:
+                if table["db_name"] in dbs:
+                    dbs[table["db_name"]] += table["db_name"]
+                else:
+                    dbs[table["db_name"]] = table["db_name"]
+        return dbs
 
 
 class Mysql(Database):
@@ -208,6 +215,3 @@ class Storage(Postgres):
                 db_provider = %(db)s ORDER BY row_count;",
                 {'date': datetime, 'db': db_provider})
             return self.dictfetchall(cursor)
-
-    def db_rowcount(self):
-        pass
