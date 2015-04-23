@@ -1,5 +1,4 @@
 import datetime
-import sys
 import logging
 # from dbtracker.console_graph import print_bars
 from dbtracker.configurator import read_config
