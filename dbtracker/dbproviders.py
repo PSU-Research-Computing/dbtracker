@@ -209,10 +209,10 @@ class Storage(Postgres):
                 LIMIT %(limit)s;", {'limit': number})
             return self.dictfetchall(cursor)
 
-    def get_timestamp(self, db_provider):
+    def get_timestamp(self, timestamp, db_provider):
         with self.connection(self.database) as cursor:
             cursor.execute(
                 "SELECT * FROM stats WHERE datetime = %(date)s AND \
                 db_provider = %(db)s ORDER BY row_count;",
-                {'date': datetime, 'db': db_provider})
+                {'date': timestamp, 'db': db_provider})
             return self.dictfetchall(cursor)
