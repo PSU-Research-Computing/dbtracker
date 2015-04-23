@@ -4,25 +4,22 @@ import datetime
 import sys
 import logging
 import warnings
-from .console_graph import print_bars
-from .configurator import read_config
-
-config = None
-read_config().sections()
+from dbtracker.console_graph import print_bars
+from dbtracker.configurator import read_config
 
 logger = logging.getLogger(__name__)
 
 
 def cli(args):
-    global config
-    if args.config:
-        config = read_config(file=args.config)
-    else:
-        config = read_config()
-    config.sections()
-    now = datetime.datetime.now()
-    if args.save:
-        save(now)
+    # Get the config
+    config = read_config(file=args.config) if args.config else read_config()
+    # Connect to the storage DB
+    storage = dbproviders.Postgres(**config._sections('storage'))
+
+    if args.history:
+        history(args, storage_db=storage)
+    elif args.save:
+        save(config)
     elif args.growth:
         d1, d2 = get_stamps(tf=args.growth)
         growth(d1, d2)
@@ -54,19 +51,24 @@ def cli(args):
         print_last_run()
 
 
-def save(timestamp):
-    mysql_tables = get_mysql_tables('mysql')
-    pg_tables = get_pg_tables('postgresql')
-    try:
-        storage_con = postgresql_con('storage', 'dbtracker')
-        logger.info('Connected to storage db')
-        save_mysql_stats(storage_con, mysql_tables, timestamp)
-        save_pg_stats(storage_con, pg_tables, timestamp)
-        storage_con.commit()
-        logger.info('Stats commited to strage db: ' + str(timestamp))
-    except psycopg2.DatabaseError as err:
-        logger.warning(
-            "Can't connect to storage db: %s", err, extra={'e': err})
+def history(args=None, storage_db=None):
+    timestamps = storage_db.get_history(args.history)
+    for i, timestamp in enumerate(timestamps):
+        date = timestamp['datetime']
+        print("{}: {} {}".format(i + 1, date, date.strftime("%A")))
+
+
+def save(config):
+    now = datetime.datetime.now()
+
+    mysql = dbproviders.Mysql(**config._sections('mysql'))
+    pg = dbproviders.Postgres(**config._sections('postgresql'))
+    storage = dbproviders.Postgres(**config._sections('storage'))
+
+    mysql_tables = mysql.get_tables()
+    pg_tables = pg.get_tables()
+
+    storage.save(mysql_tables, pg_tables, timestamp=now)
 
 
 def get_timestamps(number):
@@ -105,13 +107,6 @@ def get_timestamp(datetime, db_provider):
     except psycopg2.DatabaseError as err:
         logger.warning(
             "Can't connect to storage db: %s", err, extra={'e': err})
-
-
-def history(args):
-    timestamps = get_timestamps(args.history)
-    for i, timestamp in enumerate(timestamps):
-        date = timestamp['datetime']
-        print("{}: {} {}".format(i + 1, date, date.strftime("%A")))
 
 
 def get_stamps(ti=1, tf=2):

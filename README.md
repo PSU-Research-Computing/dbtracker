@@ -1,5 +1,8 @@
 # dbtracker
 
+[![Code Climate](https://codeclimate.com/github/PSU-OIT-ARC/dbtracker/badges/gpa.svg)](https://codeclimate.com/github/PSU-OIT-ARC/dbtracker)
+
+
 `dbtracker` quieries the mysql and postgresql databases at ARC for stats, and saves them into postgresql.
 
 ## Prerequisites

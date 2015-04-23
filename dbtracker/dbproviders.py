@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 class Database(object):
 
-    def __init__(self, host, user, password):
+    def __init__(self, host, user, password, port=None, engine=None):
         self.host = host
         self.user = user
         self.password = password
+        self.port = None
+        self. engine = None
 
     def dictfetchall(self, cursor):
         "Returns all rows from a cursor as a dict"
@@ -48,8 +50,8 @@ class Database(object):
 
 class Mysql(Database):
 
-    def __init__(self, host, user, password):
-        super().__init__(host, user, password)
+    def __init__(self, host, user, password, port=None, engine=None):
+        super().__init__(host, user, password, port, engine)
 
     @contextmanager
     def connection(self):
@@ -106,8 +108,8 @@ class Mysql(Database):
 
 class Postgres(Database):
 
-    def __init__(self, host, user, password):
-        super().__init__(host, user, password)
+    def __init__(self, host, user, password, port=None, engine=None):
+        super().__init__(host, user, password, port, engine)
 
     @contextmanager
     def connection(self, database):
@@ -170,8 +172,8 @@ class Postgres(Database):
 
 class Storage(Postgres):
 
-    def __init__(self, host, user, password, database):
-        super().__init__(host, user, password)
+    def __init__(self, host, user, password, database, port=None, engine=None):
+        super().__init__(host, user, password, port, engine)
         self.database = database
 
     def insert(self, cursor, date_time, db_provider, db_name, schema_name,
@@ -183,14 +185,13 @@ class Storage(Postgres):
                         'dbname': db_name, 'schema': schema_name,
                         'table': table_name, 'rows': row_count})
 
-    def save_db_dump(self, *dumps):
-        now = datetime.datetime.now()
+    def save(self, *dumps, timestamp=datetime.datetime.now()):
         tables = list(itertools.chain.from_iterable(dumps))
         with self.connection(self.database) as cursor:
             for table in tables:
                 try:
                     self.insert(cursor=cursor,
-                                date_time=now,
+                                date_time=timestamp,
                                 db_provider=table["db_provider"],
                                 db_name=table["db_name"],
                                 schema_name=table["schema_name"],

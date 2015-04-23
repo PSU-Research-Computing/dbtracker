@@ -6,25 +6,6 @@ from dbtracker import configurator
 # configured dbtracker
 config = configurator.read_config()
 
-mysql_login = {
-    "host": config['mysql']['host'],
-    "user": config['mysql']['user'],
-    "password": config['mysql']['password'],
-}
-
-pg_login = {
-    "host": config['postgresql']['host'],
-    "user": config['postgresql']['user'],
-    "password": config['postgresql']['password'],
-}
-
-storage_login = {
-    "host": config['storage']['host'],
-    "user": config['storage']['user'],
-    "password": config['storage']['password'],
-    "database": config['storage']['database'],
-}
-
 
 class TestMysqlProvider(unittest.TestCase):
 
@@ -32,27 +13,27 @@ class TestMysqlProvider(unittest.TestCase):
         self.assertTrue(True, "The tests ran")
 
     def test_mysql_connection(self):
-        mysql = dbproviders.Mysql(**mysql_login)
+        mysql = dbproviders.Mysql(**config._sections['mysql'])
         self.assertIsNotNone(mysql)
         with mysql.connection() as cursor:
             self.assertIsNotNone(cursor)
 
     @unittest.skip("slow")
     def test_mysql_get_tables(self):
-        mysql = dbproviders.Mysql(**mysql_login)
+        mysql = dbproviders.Mysql(**config._sections['mysql'])
         print(mysql.get_tables())
 
 
 class TestPostgressProvider(unittest.TestCase):
 
     def test_postgres_connection(self):
-        pg = dbproviders.Postgres(**pg_login)
+        pg = dbproviders.Postgres(**config._sections['postgresql'])
         with pg.connection("postgres") as cursor:
             self.assertIsNotNone(cursor)
 
     @unittest.skip("slow")
     def test_postgres_get_tables(self):
-        pg = dbproviders.Postgres(**pg_login)
+        pg = dbproviders.Postgres(**config._sections['postgresql'])
         pg_tables = pg.get_tables()
         self.assertIsNotNone(pg_tables)
 
@@ -60,7 +41,7 @@ class TestPostgressProvider(unittest.TestCase):
 class TestStorageProvider(unittest.TestCase):
 
     def test_arg_joining(self):
-        storage = dbproviders.Storage(**storage_login)
-        mysql = dbproviders.Mysql(**mysql_login)
-        pg = dbproviders.Postgres(**pg_login)
+        storage = dbproviders.Storage(**config._sections['storage'])
+        mysql = dbproviders.Mysql(**config._sections['mysql'])
+        pg = dbproviders.Postgres(**config._sections['postgresql'])
         storage.save_db_dump(mysql.get_tables(), pg.get_tables())
