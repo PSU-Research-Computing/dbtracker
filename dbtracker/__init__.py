@@ -13,7 +13,7 @@ def main(argv=None):
     parser.add_argument(
         "-g", "--growth",
         help="show the growth from the last nth timestamp",
-        type=int)
+        type=str)
     parser.add_argument(
         "-H", "--history",
         help="List the times of the last n saved runs",
