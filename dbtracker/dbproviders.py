@@ -38,13 +38,15 @@ class Database(object):
         raise NotImplementedError
 
     def db_rowcount(self, tables):
+        row_field = "row_count"
+        db_field = "db_name"
         dbs = {}
         for table in tables:
-            if table["row_count"]:
-                if table["db_name"] in dbs:
-                    dbs[table["db_name"]] += table["db_name"]
+            if table[row_field]:
+                if table[db_field] in dbs:
+                    dbs[table[db_field]] += table[row_field]
                 else:
-                    dbs[table["db_name"]] = table["db_name"]
+                    dbs[table[db_field]] = table[row_field]
         return dbs
 
 
@@ -55,7 +57,6 @@ class Mysql(Database):
 
     @contextmanager
     def connection(self):
-        logger.info('Collecting mySQL stats')
         try:
             # mysql conext manager returns cursor
             with pymysql.connect(self.host, self.user, self.password) as curs:
@@ -74,7 +75,7 @@ class Mysql(Database):
                      "table": table.get("TABLE_NAME")})
                 row_count = self.dictfetchall(cursor)[0]['COUNT(*)']
             except pymysql.err.InternalError as err:
-                logger.info('Skipping: %s', "{}.{}".format(
+                logger.info('mySQL Skipping: %s', "{}.{}".format(
                     table.get("TABLE_SCHEMA"), table.get("TABLE_NAME")),
                     extra={'err': err})
             finally:
@@ -99,11 +100,7 @@ class Mysql(Database):
                 TABLE_TYPE != 'VIEW'")
             tables = self.dictfetchall(cursor)
             tables = self.count_rows(cursor, tables)
-            logger.info('mySQL stats collected')
             return self.normalize(tables)
-
-    def db_rowcount(self):
-        pass
 
 
 class Postgres(Database):
@@ -120,11 +117,13 @@ class Postgres(Database):
                                   database=database) as conn:
                 with conn.cursor() as curs:
                     yield curs
+        except psycopg2.ProgrammingError as err:
+            logger.error(err)
         except psycopg2.DatabaseError as err:
             # Handle connection errors
-            logger.info('Skipping: %s', database, extra={'err': err})
-        except Exception as e:
-            logger.error(e)
+            logger.info('Postgres Skipping: %s', database, extra={'err': err})
+        except Exception as err:
+            logger.error(err)
 
     def get_dbs(self):
         with self.connection(database='postgres') as cursor:
@@ -165,9 +164,6 @@ class Postgres(Database):
                     table['db_name'] = db_name
                 pg_tables = pg_tables + pg_db_tables
         return self.normalize(pg_tables)
-
-    def db_rowcount(self):
-        pass
 
 
 class Storage(Postgres):

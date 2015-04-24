@@ -12,28 +12,20 @@ def main(argv=None):
         help="generate and save database stats")
     parser.add_argument(
         "-g", "--growth",
-        help="show the growth from the last nth timestamp",
+        help="display a graph of the growth.  Arguments in the form of run number ranges e.g. 3-4 or 4",
         type=str)
     parser.add_argument(
         "-H", "--history",
-        help="List the times of the last n saved runs",
+        help="List the datetime stamps of the last n saved runs",
         type=int)
     parser.add_argument(
         "-c", "--count",
         action="store_true",
         help="Gets database row counts but does not save")
     parser.add_argument(
-        "-r", "--range",
+        "-d", "--dates",
         type=str,
-        help="compares history range eg 3-6")
-    parser.add_argument(
-        "-d", "--date",
-        type=str,
-        help="compares date to last run")
-    parser.add_argument(
-        "-D", "--drange",
-        type=str,
-        help="compares stats between two dates")
+        help="compares two datetime stamps e.g. 2015-04-24 16:18:57.166095-07:00 - 2015-04-22 17:00:50.746688-07:00")
     parser.add_argument(
         "-s", "--silent",
         action="store_true",

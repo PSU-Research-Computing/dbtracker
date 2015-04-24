@@ -1,7 +1,7 @@
 import datetime
 import logging
 import sys
-# from dbtracker.console_graph import print_bars
+from dateutil.parser import parse
 from dbtracker.configurator import read_config
 from dbtracker.dbproviders import Storage, Mysql, Postgres
 from dbtracker.console_graph import print_bars
@@ -29,8 +29,8 @@ class Cli(object):
             self.growth()
         elif args.count:
             self.count()
-        elif args.date:
-            self.date()
+        elif args.dates:
+            self.dates()
 
     def save(self):
         now = datetime.datetime.now()
@@ -44,30 +44,59 @@ class Cli(object):
         timestamps = self.storage.get_history(self.args.history)
         for i, timestamp in enumerate(timestamps):
             date = timestamp['datetime']
-            print("{}: {} {}".format(i, date, date.strftime("%A")))
+            print("{}: {} [{}]".format(i, date, date.strftime("%A")))
 
     def growth(self):
         runs = self.args.growth.split("-")
         if len(runs) == 1:
-            t1, t2 = 1, runs[0]
+            t1 = 0
+            t2 = int(runs[0])
         elif len(runs) == 2:
-            t1, t2 = runs[0], runs[1]
+            t1 = int(runs[0])
+            t2 = int(runs[1])
         else:
             logger.warning("Cant parse range")
             sys.exit(1)
-        diff = self.difference(int(t1), int(t2))
-        print(diff)
+        d1, d2 = self.get_datetime_from_run(t1, t2)
+        mysql_diff, pg_diff = self.run_difference(d1, d2)
+        self.diff_printer(d1, d2, mysql=mysql_diff, pg=pg_diff)
 
-    def count(self):
-        raise NotImplementedError
+    def diff_printer(self, d1, d2, mysql=None, pg=None):
+        print("==== PostgreSQL {} - {} ====".format(d1, d2))
+        print_bars(pg)
+        print("==== MySQL [{}] - [{}] ====".format(d1, d2))
+        print_bars(mysql)
 
-    def date(self):
-        raise NotImplementedError
+    def dates(self):
+        dates = self.args.dates.split(' - ')
+        if len(dates) == 2:
+            d1 = parse(dates[0], fuzzy=True)
+            d2 = parse(dates[1], fuzzy=True)
+            mysql_diff, pg_diff = self.run_difference(d1, d2)
+            self.diff_printer(d1, d2, mysql=mysql_diff, pg=pg_diff)
+        else:
+            logger.warning("Cant parse range")
+            sys.exit(1)
 
-    def difference(self, t1, t2):
-        hrange = self.storage.get_history(max([t1, t2]))
-        d1mysql = self.storage.get_timestamp(hrange[t1], 'mysql')
-        d2mysql = self.storage.get_timestamp(hrange[t2 - 1], 'mysql')
-        d1pg = self.storage.get_timestamp(hrange[t1], 'pg')
-        d2pg = self.storage.get_timestamp(hrange[t2 - 1], 'pg')
-        return d1pg
+    def get_datetime_from_run(self, t1, t2):
+        hrange = self.storage.get_history(max([t1, t2]) + 1)
+        d1 = hrange[t1]['datetime']
+        d2 = hrange[t2]['datetime']
+        return d1, d2
+
+    def run_difference(self, d1, d2):
+        mysql_diff = self.difference(d1, d2, 'mysql')
+        pg_diff = self.difference(d1, d2, 'pg')
+        return mysql_diff, pg_diff
+
+    def difference(self, d1, d2, provider):
+        d1_tables = self.storage.get_timestamp(d1, provider)
+        d2_tables = self.storage.get_timestamp(d2, provider)
+
+        d1_totals = self.storage.db_rowcount(d1_tables)
+        d2_totals = self.storage.db_rowcount(d2_tables)
+
+        diff = {}
+        for key in d1_totals:
+            diff[key] = d1_totals[key] - d2_totals.get(key, 0)
+        return diff
