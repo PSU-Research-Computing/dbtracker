@@ -29,7 +29,7 @@ def main(argv=None):
     parser.add_argument(
         "-s", "--silent",
         action="store_true",
-        help="turns logging levels down to ")
+        help="turns logging levels down to ERROR only")
     parser.add_argument(
         "-C", "--config",
         type=str,
