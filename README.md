@@ -37,6 +37,4 @@ $ dbtracker -h
 
 ## Configure
 
-`dbtracker` expects a `local_settings.py` inside `./dbtracker/local_settings`.  This repository has a `local_settings.example` file which can be duplicated and configured.  Do not check your `local_settings.py` into version control.
-
-Once production details are worked out, this configuration file may be automatically created and stored somewhere in userspace.
+`dbtracker` expects a `dbtracker.ini` inside `~/.config/`.  This repository has an example `dbtracker.ini` file which can be duplicated and configured by hand.  An alternate path can be specified using the `--config /path/to/config.ini` flag.
